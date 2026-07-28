@@ -4,22 +4,27 @@ on:
   push:
     branches:
       - master
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
 
 permissions:
   contents: read
+  statuses: write
+
+concurrency:
+  group: build-windows-master
+  cancel-in-progress: true
 
 jobs:
   build:
     name: Build Release
     runs-on: windows-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -32,6 +37,21 @@ jobs:
           /t:Rebuild
           /p:Configuration=Release
           /p:Platform=AnyCPU
+          /p:ContinuousIntegrationBuild=true
+
+      - name: Generate SHA-256 manifest
+        shell: pwsh
+        run: |
+          $releasePath = (Resolve-Path "src/bin/Release").Path
+          $manifestPath = Join-Path $releasePath "SHA256SUMS.txt"
+          $manifestLines = Get-ChildItem -Path $releasePath -File -Recurse |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relativePath = [System.IO.Path]::GetRelativePath($releasePath, $_.FullName).Replace('\', '/')
+              $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $relativePath"
+            }
+          [System.IO.File]::WriteAllLines($manifestPath, $manifestLines, [System.Text.UTF8Encoding]::new($false))
 
       - name: Upload compiled application
         uses: actions/upload-artifact@v4
@@ -39,3 +59,34 @@ jobs:
           name: Thio-Background-App-Notifier-Release
           path: src/bin/Release/**
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish verifiable commit status
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RESULT: ${{ job.status }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $state = if ($env:BUILD_RESULT -eq 'success') { 'success' } else { 'failure' }
+          $description = if ($state -eq 'success') { 'Release build and artifact upload succeeded' } else { 'Release build or artifact upload failed' }
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $body = @{
+            state = $state
+            context = 'Build Windows App / Build Release'
+            description = $description
+            target_url = $env:RUN_URL
+          } | ConvertTo-Json
+          Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.github.com/repos/$env:REPOSITORY/statuses/$env:COMMIT_SHA" `
+            -Headers $headers `
+            -ContentType 'application/json' `
+            -Body $body | Out-Null
