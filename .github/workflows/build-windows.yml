@@ -1,0 +1,41 @@
+name: Build Windows App
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release configuration
+        shell: pwsh
+        run: >-
+          msbuild src/New-Startup-App-Notifier.csproj
+          /m
+          /t:Rebuild
+          /p:Configuration=Release
+          /p:Platform=AnyCPU
+
+      - name: Upload compiled application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Thio-Background-App-Notifier-Release
+          path: src/bin/Release/**
+          if-no-files-found: error
