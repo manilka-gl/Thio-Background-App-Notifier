@@ -41,13 +41,15 @@ public partial class ItemListForm
         if (_buttonExportCsv != null && _buttonExportJson != null)
             return;
 
+        int nextTabIndex = GetNextAvailableTabIndex();
+
         if (_buttonExportCsv == null)
         {
             _buttonExportCsv = CreateExportButton(
                 name: "buttonExportCsv",
                 text: "Export CSV",
                 left: buttonClearFilter.Right + ExportButtonSpacing,
-                tabIndex: buttonClearFilter.TabIndex + 1,
+                tabIndex: nextTabIndex++,
                 clickHandler: buttonExportCsv_Click,
                 toolTip: "Export every unfiltered row and column to an Excel-compatible CSV file. Exported data may include local system paths.");
         }
@@ -58,10 +60,19 @@ public partial class ItemListForm
                 name: "buttonExportJson",
                 text: "Export JSON",
                 left: _buttonExportCsv.Right + ExportButtonSpacing,
-                tabIndex: _buttonExportCsv.TabIndex + 1,
+                tabIndex: nextTabIndex,
                 clickHandler: buttonExportJson_Click,
                 toolTip: "Export every unfiltered row and column to structured UTF-8 JSON. Exported data may include local system paths.");
         }
+    }
+
+    private int GetNextAvailableTabIndex()
+    {
+        int nextTabIndex = 0;
+        foreach (Control control in Controls)
+            nextTabIndex = Math.Max(nextTabIndex, control.TabIndex + 1);
+
+        return nextTabIndex;
     }
 
     private Button CreateExportButton(
@@ -182,7 +193,7 @@ public partial class ItemListForm
             string header = columnIndex < _baseHeaderText.Length
                 ? _baseHeaderText[columnIndex]
                 : listView.Columns[columnIndex].Text;
-            headers[columnIndex] = MakeValidUnicode(header);
+            headers[columnIndex] = SanitizeExportText(header);
         }
 
         List<string[]> rows = new List<string[]>(_unfilteredItemList.Count);
@@ -194,14 +205,14 @@ public partial class ItemListForm
                 string value = columnIndex < row.SubItems.Count
                     ? row.SubItems[columnIndex].Text
                     : string.Empty;
-                cells[columnIndex] = MakeValidUnicode(value);
+                cells[columnIndex] = SanitizeExportText(value);
             }
             rows.Add(cells);
         }
 
         string title = string.IsNullOrWhiteSpace(Text) ? "Startup Items" : Text.Trim();
         return new ExportSnapshot(
-            title: MakeValidUnicode(title),
+            title: SanitizeExportText(title),
             exportedAtUtc: DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             headers: headers,
             rows: rows);
@@ -291,7 +302,7 @@ public partial class ItemListForm
 
     private static string CreateUniqueJsonKey(string label, int columnIndex, HashSet<string> usedKeys)
     {
-        string normalized = MakeValidUnicode(label).Normalize(NormalizationForm.FormKC);
+        string normalized = SanitizeExportText(label).Normalize(NormalizationForm.FormKC);
         StringBuilder builder = new StringBuilder(normalized.Length);
         bool previousWasSeparator = false;
 
@@ -338,7 +349,7 @@ public partial class ItemListForm
 
     private static string EscapeCsvCell(string value)
     {
-        value = NeutralizeSpreadsheetFormula(MakeValidUnicode(value));
+        value = NeutralizeSpreadsheetFormula(SanitizeExportText(value));
 
         bool requiresQuotes = value.IndexOfAny(CsvCharactersRequiringQuotes) >= 0;
         if (value.IndexOf('"') >= 0)
@@ -363,7 +374,7 @@ public partial class ItemListForm
         return value;
     }
 
-    private static string MakeValidUnicode(string? value)
+    private static string SanitizeExportText(string? value)
     {
         if (string.IsNullOrEmpty(value))
             return string.Empty;
@@ -372,6 +383,7 @@ public partial class ItemListForm
         for (int index = 0; index < value.Length; index++)
         {
             char character = value[index];
+
             if (char.IsHighSurrogate(character))
             {
                 if (index + 1 < value.Length && char.IsLowSurrogate(value[index + 1]))
@@ -379,38 +391,37 @@ public partial class ItemListForm
                     if (sanitized != null)
                     {
                         sanitized.Append(character);
-                        sanitized.Append(value[++index]);
+                        sanitized.Append(value[index + 1]);
                     }
-                    else
-                    {
-                        index++;
-                    }
+                    index++;
                     continue;
                 }
 
-                if (sanitized == null)
-                {
-                    sanitized = new StringBuilder(value.Length);
-                    sanitized.Append(value, 0, index);
-                }
-                sanitized.Append('\uFFFD');
+                AppendReplacementCharacter(ref sanitized, value, index);
+                continue;
             }
-            else if (char.IsLowSurrogate(character))
+
+            if (char.IsLowSurrogate(character) || !XmlConvert.IsXmlChar(character))
             {
-                if (sanitized == null)
-                {
-                    sanitized = new StringBuilder(value.Length);
-                    sanitized.Append(value, 0, index);
-                }
-                sanitized.Append('\uFFFD');
+                AppendReplacementCharacter(ref sanitized, value, index);
+                continue;
             }
-            else if (sanitized != null)
-            {
-                sanitized.Append(character);
-            }
+
+            sanitized?.Append(character);
         }
 
         return sanitized?.ToString() ?? value;
+    }
+
+    private static void AppendReplacementCharacter(ref StringBuilder? sanitized, string originalValue, int invalidIndex)
+    {
+        if (sanitized == null)
+        {
+            sanitized = new StringBuilder(originalValue.Length);
+            sanitized.Append(originalValue, 0, invalidIndex);
+        }
+
+        sanitized.Append('\uFFFD');
     }
 
     private static void WriteFileAtomically(string filePath, Action<Stream> writeAction)
@@ -478,7 +489,7 @@ public partial class ItemListForm
 
     private string GetDefaultExportFileName(string extension)
     {
-        string baseName = string.IsNullOrWhiteSpace(Text) ? "startup-items" : MakeValidUnicode(Text.Trim());
+        string baseName = string.IsNullOrWhiteSpace(Text) ? "startup-items" : SanitizeExportText(Text.Trim());
         foreach (char invalidCharacter in Path.GetInvalidFileNameChars())
             baseName = baseName.Replace(invalidCharacter, '_');
 
