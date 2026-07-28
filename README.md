@@ -74,7 +74,10 @@ It scans silently and only pops up a notification **if** something new actually 
 2. **Open it again whenever you want to check.** It rescans and shows any auto-run Services or Scheduled Tasks that appeared since last time, highlighted in the list.
 3. **Double-click any row** for full details (executable path, service start type, task triggers, when it was first detected, etc.).
 4. Use **"All Startup Services"** or **"All Startup Tasks"** to browse *everything* currently set to run, not just the new stuff.
-5. In either complete list, use **"Export CSV"** to save every row and column for use in Excel or another spreadsheet application.
+5. In either complete list, use **"Export CSV"** for spreadsheet-compatible output or **"Export JSON"** for structured machine-readable output. Both exports include every unfiltered row and every displayed column.
+
+> [!IMPORTANT]
+> Exported files can contain local executable paths, service names, task names, and other system details. Store or share them with the same care as other diagnostic data.
 
 --------
 
@@ -95,7 +98,10 @@ It scans silently and only pops up a notification **if** something new actually 
 **A:** Not for normal scanning or the detection log. Some items you lack permission to read are simply skipped.
 
 ### **Q:** Does it change or remove any of my startup items?
-**A:** No. It's read-only — it only *reports* what it finds. The only thing it writes is its own detection log and (optionally) its own startup shortcut.
+**A:** No. It's read-only — it only *reports* what it finds. The only thing it writes is its own detection log, optional startup shortcut, and any CSV or JSON export file that you explicitly choose to save.
+
+### **Q:** Are CSV exports safe to open in spreadsheet software?
+**A:** The exporter quotes CSV fields correctly and neutralizes cells that could otherwise be interpreted as spreadsheet formulas. JSON exports preserve the original text values without spreadsheet-specific transformations.
 
 ### **Q:** Will this detect malware?
 **A:** Possibly, but it's mainly intended for legitimate software with annoying startup practices. There are lots of other ways malware can hide that this app wouldn't catch.
