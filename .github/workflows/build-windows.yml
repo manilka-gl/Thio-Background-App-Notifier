@@ -31,13 +31,29 @@ jobs:
 
       - name: Build Release configuration
         shell: pwsh
-        run: >-
-          msbuild src/New-Startup-App-Notifier.csproj
-          /m
-          /t:Rebuild
-          /p:Configuration=Release
-          /p:Platform=AnyCPU
-          /p:ContinuousIntegrationBuild=true
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP 'msbuild.log'
+          & msbuild src/New-Startup-App-Notifier.csproj `
+            /nologo `
+            /m `
+            /t:Rebuild `
+            /p:Configuration=Release `
+            /p:Platform=AnyCPU `
+            /p:ContinuousIntegrationBuild=true `
+            /verbosity:minimal 2>&1 | Tee-Object -FilePath $logPath
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            exit $exitCode
+          }
+
+      - name: Upload compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Thio-Background-App-Notifier-Build-Diagnostics
+          path: ${{ runner.temp }}/msbuild.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Generate SHA-256 manifest
         shell: pwsh
