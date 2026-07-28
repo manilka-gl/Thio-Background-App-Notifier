@@ -39,7 +39,6 @@ jobs:
             /t:Rebuild `
             /p:Configuration=Release `
             /p:Platform=AnyCPU `
-            /p:ContinuousIntegrationBuild=true `
             /verbosity:minimal 2>&1 | Tee-Object -FilePath $logPath
           $exitCode = $LASTEXITCODE
           if ($exitCode -ne 0) {
