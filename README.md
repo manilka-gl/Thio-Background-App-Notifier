@@ -74,8 +74,10 @@ It scans silently and only pops up a notification **if** something new actually 
 2. **Open it again whenever you want to check.** It rescans and shows any auto-run Services or Scheduled Tasks that appeared since last time, highlighted in the list.
 3. **Double-click any row** for full details (executable path, service start type, task triggers, when it was first detected, etc.).
 4. Use **"All Startup Services"** or **"All Startup Tasks"** to browse *everything* currently set to run, not just the new stuff.
+5. In either complete list, use **"Export CSV"** to save every row and column for use in Excel or another spreadsheet application.
 
 --------
+
 
 
 # Frequently Asked Questions
